@@ -57,3 +57,12 @@ This database is local and should be backed up. It is excluded from Git. Do not 
 5. Add resume tailoring/version history with source-to-claim traceability.
 6. Add permitted-source job discovery and posting-date verification.
 7. Add outcome analytics and an AI learning/recommendation workflow.
+
+
+## Run the database tests
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+A GitHub Actions workflow runs these checks on pushes and pull requests to `main`.
