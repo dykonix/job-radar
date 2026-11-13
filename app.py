@@ -32,7 +32,7 @@ def fmt_count(sql: str) -> int:
 
 
 
-elif page == "Review & Fit":
+if page == "Review & Fit":
     st.subheader("Verify vacancy and assess profile fit")
     jobs = query_df("SELECT id,title,company,original_url,location,eligibility_status,vacancy_status FROM jobs ORDER BY discovered_at DESC")
     if jobs.empty:
