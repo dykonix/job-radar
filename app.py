@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from pathlib import Path
 import streamlit as st
 
 from src.db import init_db, execute, query_df, query_one
@@ -20,7 +21,7 @@ div[data-testid="stMetric"] {background: #f7f8fa; padding: 14px 16px; border-rad
 st.title("🎯 Job Radar")
 st.caption("Your job-search operating system · Local database · Evidence-first decisions")
 
-pages = ["Overview", "Discover Remote Jobs", "Review & Fit", "Add a Job", "Job Library", "Assessments", "Applications", "Recruiter Activity", "Interviews & Outcomes", "Learning Log"]
+pages = ["Overview", "Discover Remote Jobs", "Resume Profiles", "Review & Fit", "Add a Job", "Job Library", "Assessments", "Applications", "Recruiter Activity", "Interviews & Outcomes", "Learning Log"]
 page = st.sidebar.radio("Workspace", pages)
 st.sidebar.divider()
 st.sidebar.caption("Version 0.3 · Local SQLite")
@@ -31,6 +32,45 @@ def fmt_count(sql: str) -> int:
     return int(row["n"] if row else 0)
 
 
+
+if page == "Resume Profiles":
+    st.subheader("Benchmark resume profiles")
+    st.caption("Register the exact resume version used for assessments. Uploaded files and evidence notes stay in your local Job Radar data folder/database; they are not committed to GitHub.")
+    profiles = query_df("SELECT * FROM resumes WHERE is_active=1 ORDER BY id")
+    for _, profile in profiles.iterrows():
+        with st.expander(str(profile["name"]) + " · " + str(profile["resume_type"]), expanded=True):
+            st.write(profile["notes"] or "")
+            st.caption("Current version: " + str(profile["version_label"] or "Not registered"))
+            if profile["file_path"]:
+                st.write("Stored file: " + Path(profile["file_path"]).name)
+            with st.form("resume_profile_" + str(int(profile["id"]))):
+                default_version = "Approved Product Management resume" if profile["resume_type"] == "Product Management" else "Technical Project Delivery resume"
+                version = st.text_input("Version label", value=profile["version_label"] or default_version)
+                uploaded = st.file_uploader("Upload current resume (PDF or DOCX)", type=["pdf", "docx"], key="resume_upload_" + str(int(profile["id"])))
+                evidence = st.text_area("Verified experience evidence / profile notes", value=profile["evidence_notes"] or "", height=150,
+                    placeholder="Record only claims supported by this resume and confirmed experience. Keep gaps and unknowns explicit.")
+                save_profile = st.form_submit_button("Save profile")
+                if save_profile:
+                    stored_path = profile["file_path"]
+                    if uploaded is not None:
+                        folder = Path(__file__).resolve().parent / "data" / "resumes"
+                        folder.mkdir(parents=True, exist_ok=True)
+                        suffix = ".pdf" if uploaded.name.lower().endswith(".pdf") else ".docx"
+                        stored = folder / ("resume_" + str(int(profile["id"])) + suffix)
+                        stored.write_bytes(uploaded.getbuffer())
+                        stored_path = str(stored)
+                    execute("UPDATE resumes SET version_label=?,file_path=?,evidence_notes=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                        (version.strip(), stored_path, evidence.strip(), int(profile["id"])))
+                    st.success("Resume profile saved locally. Existing assessments and application history are preserved.")
+    st.markdown("### Matching rules")
+    st.markdown("""
+    - Assess every vacancy against both benchmark profiles.
+    - Select the stronger resume based on evidence, not the job title alone.
+    - Classify material requirements as STRONG MATCH, PARTIAL MATCH, TRANSFERABLE, GAP or UNKNOWN.
+    - Keep India eligibility, posting freshness and vacancy status as separate screening gates.
+    - Add JD keywords only when the registered resume/evidence notes support them.
+    - The current release stores human-entered assessments; AI scoring is not yet implemented.
+    """)
 
 if page == "Review & Fit":
     st.subheader("Verify vacancy and assess profile fit")
@@ -263,7 +303,7 @@ elif page == "Assessments":
         st.info("Add a job first.")
     else:
         job_id = st.selectbox("Vacancy", jobs.id.tolist(), format_func=lambda x: f"#{x} · {jobs.loc[jobs.id==x,'title'].iloc[0]} — {jobs.loc[jobs.id==x,'company'].iloc[0]}")
-        st.info("This initial build stores structured, evidence-based assessments. AI-generated assessment is not yet connected; do not treat an empty assessment as a fit decision.")
+        st.info("Assess both benchmark profiles independently. Use the registered resume version and evidence notes; an empty assessment is not a fit decision. AI-generated assessment is not yet connected.")
         for _, resume in resumes.iterrows():
             st.markdown(f"#### {resume['name']}")
             prior = query_one("SELECT * FROM assessments WHERE job_id=? AND resume_id=? ORDER BY created_at DESC LIMIT 1", (int(job_id), int(resume.id)))
