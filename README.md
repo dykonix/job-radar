@@ -7,7 +7,7 @@ A local-first application for managing the full job-search lifecycle. The databa
 Implemented:
 - Manual job intake with original JD, source URL, location, work mode, employment type, compensation, posting date and evidence.
 - Persistent SQLite database with relational records for jobs, resumes, assessments, applications, interactions, interviews, outcomes and improvement experiments.
-- Comparison record for both primary resumes (Project Manager and Associate Product Manager).
+- Two benchmark resume profiles: Project Management and Product Management (covering APM, Product Operations and Product Delivery).
 - Application tracking, recruiter activity, interview rounds and outcomes.
 - Basic pipeline and funnel counts.
 - Target role families include Project Manager, Technical Project Manager, Program/Delivery Manager and Scrum Master.
@@ -16,6 +16,7 @@ Implemented:
 - Source identity deduplication and additive SQLite migrations that preserve existing local records.
 - Vacancy verification workflow: India eligibility, open/closed status, evidence text, evidence URL and verification timestamp.
 - Per-resume fit-review workflow with match score, APPLY / APPLY WITH CAUTION / DO NOT APPLY, evidence, gaps, screening risks, ATS keywords and tailoring actions.
+- Resume Profiles page to register local PDF/DOCX versions, version labels and verified evidence notes. Resume files stay under the local data/resumes folder and are not committed to GitHub.
 - Freshness buckets are recorded from source publication timestamps; missing timestamps remain unverified.
 
 Not implemented yet:
@@ -60,7 +61,7 @@ This database is local and should be backed up. It is excluded from Git. Do not 
 
 ## Next development increments
 
-1. Add resume file upload, parsing and version registry.
+1. Add automatic resume parsing and structured claim extraction (manual local file/version registry is now available).
 2. Build structured JD extraction and requirement taxonomy.
 3. Implement evidence-grounded comparison against both resumes with explicit STRONG MATCH / PARTIAL MATCH / TRANSFERABLE / GAP / UNKNOWN classifications.
 4. Add an auditable decision rubric and ATS keyword analysis.
