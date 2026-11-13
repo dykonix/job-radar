@@ -191,6 +191,8 @@ def init_db() -> None:
     with connect() as conn:
         conn.executescript(SCHEMA)
         _migrate(conn)
+        conn.execute("UPDATE resumes SET name=?, resume_type=?, notes=? WHERE name=?", ("Project Management Resume", "Project Management", "Technical project delivery and project management benchmark profile", "Project Manager Resume"))
+        conn.execute("UPDATE resumes SET name=?, resume_type=?, notes=? WHERE name=?", ("Product Management Resume", "Product Management", "Product management, product operations and technical product delivery benchmark profile", "Associate Product Manager Resume"))
         conn.execute(
             "INSERT OR IGNORE INTO resumes(name, resume_type, notes) VALUES (?, ?, ?)",
             ("Project Management Resume", "Project Management", "Technical project delivery and project management benchmark profile"),
@@ -199,8 +201,6 @@ def init_db() -> None:
             "INSERT OR IGNORE INTO resumes(name, resume_type, notes) VALUES (?, ?, ?)",
             ("Product Management Resume", "Product Management", "Product management, product operations and technical product delivery benchmark profile"),
         )
-        conn.execute("UPDATE resumes SET name=?, resume_type=?, notes=? WHERE name=?", ("Project Management Resume", "Project Management", "Technical project delivery and project management benchmark profile", "Project Manager Resume"))
-        conn.execute("UPDATE resumes SET name=?, resume_type=?, notes=? WHERE name=?", ("Product Management Resume", "Product Management", "Product management, product operations and technical product delivery benchmark profile", "Associate Product Manager Resume"))
 
 def execute(query: str, params: tuple[Any, ...] = ()) -> int:
     with connect() as conn:
