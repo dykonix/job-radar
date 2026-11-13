@@ -6,6 +6,7 @@ import streamlit as st
 
 from src.db import init_db, execute, query_df, query_one
 from src.remote_discovery import discover
+from src.ai_assessment import assess_resume
 
 st.set_page_config(page_title="Job Radar | Job Search Command Center", page_icon="🎯", layout="wide")
 init_db()
@@ -109,36 +110,82 @@ if page == "Review & Fit":
                     updated_at=CURRENT_TIMESTAMP WHERE id=?""",
                     (eligibility,vacancy,evidence,verify_note,evidence_url,int(job_id)))
                 st.success("Verification saved.")
-        st.markdown("### B. Record profile-fit assessment")
-        st.caption("This release does not yet run an AI assessment. Scores and decisions entered here must be based on the full JD and your verified resume evidence. Do not guess.")
+        st.markdown("### B. AI profile-fit assessment")
+        st.caption("Runs an independent OpenAI assessment against each registered resume, then saves both results. Resume text and the selected job description are sent to OpenAI only when you click the button. Scores are heuristic, not hiring probabilities.")
+        st.warning("Privacy and cost: the job description, extracted resume text and verified evidence notes will be sent to OpenAI for processing. API usage is billed to your OpenAI API account.")
         resumes = query_df("SELECT * FROM resumes WHERE is_active=1 ORDER BY id")
-        for _, resume in resumes.iterrows():
-            prior = query_one("SELECT * FROM assessments WHERE job_id=? AND resume_id=? ORDER BY created_at DESC LIMIT 1",
-                              (int(job_id),int(resume.id)))
-            with st.expander(f"Assess against {resume['name']}", expanded=False):
-                with st.form(f"fit_{int(resume.id)}"):
-                    score = st.slider("Profile match score (0–100)",0,100,
-                        int(prior["fit_score"] or 0) if prior else 0)
-                    decision = st.selectbox("Recommendation",
-                        ["PENDING","APPLY","APPLY WITH CAUTION","DO NOT APPLY"],
-                        index=["PENDING","APPLY","APPLY WITH CAUTION","DO NOT APPLY"].index(prior["decision"]) if prior else 0)
-                    strengths = st.text_area("Strong / relevant evidence",value=prior["strengths"] or "" if prior else "")
-                    gaps = st.text_area("Partial matches, transferable experience and gaps",value=prior["gaps"] or "" if prior else "")
-                    risks = st.text_area("Mandatory screening risks",value=prior["screening_risks"] or "" if prior else "")
-                    keywords = st.text_area("ATS: covered / missing / safe to add / do not add",value=prior["ats_keywords"] or "" if prior else "")
-                    tailoring = st.text_area("Changes required before applying",value=prior["tailoring_actions"] or "" if prior else "")
-                    rationale = st.text_area("Decision rationale",value=prior["rationale"] or "" if prior else "")
-                    save_fit = st.form_submit_button("Save fit assessment")
-                    if save_fit:
-                        execute("""INSERT INTO assessments(job_id,resume_id,decision,fit_score,strengths,gaps,
-                            screening_risks,ats_keywords,tailoring_actions,rationale,assessment_version)
-                            VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(job_id,resume_id,assessment_version) DO UPDATE SET
-                            decision=excluded.decision,fit_score=excluded.fit_score,strengths=excluded.strengths,
-                            gaps=excluded.gaps,screening_risks=excluded.screening_risks,
-                            ats_keywords=excluded.ats_keywords,tailoring_actions=excluded.tailoring_actions,
-                            rationale=excluded.rationale,created_at=CURRENT_TIMESTAMP""",
-                            (int(job_id),int(resume.id),decision,score,strengths,gaps,risks,keywords,tailoring,rationale,"manual-v1"))
-                        st.success("Fit assessment saved.")
+        ready = resumes[resumes["file_path"].notna() & (resumes["file_path"].astype(str).str.strip() != "")]
+        if len(ready) < 2:
+            st.info("Upload both benchmark resumes in Resume Profiles before running a two-resume comparison.")
+        if st.button("Run OpenAI assessment against both resumes", type="primary", disabled=len(ready) < 2):
+            results = []
+            progress = st.empty()
+            for _, resume in ready.iterrows():
+                progress.info("Assessing " + str(resume["name"]) + "…")
+                try:
+                    result = assess_resume(job, resume.to_dict())
+                    strengths = "\\n".join("• " + x for x in result["strong_evidence"])
+                    matches = "\\n".join(f'{x["requirement"]}: {x["classification"]} — {x["evidence"]}' for x in result["requirement_matches"])
+                    gaps = matches or "No material requirements were returned."
+                    risks = "\\n".join("• " + x for x in result["screening_risks"])
+                    ats = ("ALREADY COVERED: " + ", ".join(result["covered_keywords"]) +
+                           "\\nMISSING: " + ", ".join(result["missing_keywords"]) +
+                           "\\nSAFE TO ADD: " + ", ".join(result["safe_to_add"]) +
+                           "\\nDO NOT ADD: " + ", ".join(result["do_not_add"]))
+                    tailoring = "\\n".join("• " + x for x in result["tailoring_actions"])
+                    execute("""INSERT INTO assessments(job_id,resume_id,decision,fit_score,strengths,gaps,
+                        screening_risks,ats_keywords,tailoring_actions,rationale,assessment_version)
+                        VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(job_id,resume_id,assessment_version) DO UPDATE SET
+                        decision=excluded.decision,fit_score=excluded.fit_score,strengths=excluded.strengths,
+                        gaps=excluded.gaps,screening_risks=excluded.screening_risks,
+                        ats_keywords=excluded.ats_keywords,tailoring_actions=excluded.tailoring_actions,
+                        rationale=excluded.rationale,created_at=CURRENT_TIMESTAMP""",
+                        (int(job_id),int(resume["id"]),result["decision"],result["fit_score"],strengths,gaps,
+                         risks,ats,tailoring,result["rationale"],"openai-v1"))
+                    results.append({"name": str(resume["name"]), **result})
+                except Exception as exc:
+                    st.error(f'Assessment failed for {resume["name"]}: {exc}')
+            progress.empty()
+            if results:
+                st.success(f"Saved {len(results)} AI assessment(s).")
+                st.session_state["latest_ai_comparison"] = {"job_id": int(job_id), "results": results}
+        latest = st.session_state.get("latest_ai_comparison", {})
+        if latest.get("job_id") == int(job_id) and latest.get("results"):
+            results = latest["results"]
+            ranked = sorted(results, key=lambda x: x["fit_score"], reverse=True)
+            st.markdown("### Resume comparison")
+            if len(ranked) == 2:
+                st.write(f'**Stronger starting point:** {ranked[0]["name"]} (model score {ranked[0]["fit_score"]}/100 vs {ranked[1]["fit_score"]}/100). Review mandatory gaps and decision rationale before relying on this ranking.')
+            for item in results:
+                with st.expander(f'{item["name"]} · {item["fit_score"]}/100 · {item["decision"]}', expanded=True):
+                    st.write(item["summary"])
+                    st.markdown("**Strong evidence**")
+                    for value in item["strong_evidence"]:
+                        st.write("• " + value)
+                    st.markdown("**Requirement-by-requirement assessment**")
+                    st.dataframe(item["requirement_matches"], use_container_width=True, hide_index=True)
+                    st.markdown("**Mandatory screening risks**")
+                    for value in item["screening_risks"] or ["No specific risk identified by the model; verify independently."]:
+                        st.write("• " + value)
+                    st.markdown("**ATS keyword audit**")
+                    st.write("Already covered: " + ", ".join(item["covered_keywords"]))
+                    st.write("Missing: " + ", ".join(item["missing_keywords"]))
+                    st.write("Safe to add: " + ", ".join(item["safe_to_add"]))
+                    st.write("Do not add: " + ", ".join(item["do_not_add"]))
+                    st.markdown("**Changes before applying**")
+                    for value in item["tailoring_actions"]:
+                        st.write("• " + value)
+                    st.markdown("**Decision rationale**")
+                    st.write(item["rationale"])
+        st.markdown("### Previously saved assessments")
+        saved = query_df("""SELECT r.name AS Resume, a.decision AS Decision, a.fit_score AS Score,
+            a.assessment_version AS Version, a.created_at AS Assessed
+            FROM assessments a JOIN resumes r ON r.id=a.resume_id
+            WHERE a.job_id=? ORDER BY a.created_at DESC""", (int(job_id),))
+        if not saved.empty:
+            st.dataframe(saved, use_container_width=True, hide_index=True)
+        else:
+            st.caption("No saved assessment for this vacancy yet.")
 
 if page == "Discover Remote Jobs":
     st.subheader("Discover India-accessible remote PM & Scrum roles")
