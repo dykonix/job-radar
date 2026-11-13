@@ -24,6 +24,9 @@ CREATE TABLE IF NOT EXISTS jobs (
     role_family TEXT,
     eligibility_status TEXT NOT NULL DEFAULT 'REVIEW',
     eligibility_reason TEXT,
+    eligibility_evidence TEXT,
+    eligibility_checked_at TEXT,
+    vacancy_status TEXT,
     job_description TEXT NOT NULL,
     location TEXT,
     work_mode TEXT,
@@ -160,6 +163,9 @@ def _migrate(conn: sqlite3.Connection) -> None:
         "role_family": "TEXT",
         "eligibility_status": "TEXT NOT NULL DEFAULT 'REVIEW'",
         "eligibility_reason": "TEXT",
+        "eligibility_evidence": "TEXT",
+        "eligibility_checked_at": "TEXT",
+        "vacancy_status": "TEXT",
     }
     for name, definition in additions.items():
         if name not in columns:
