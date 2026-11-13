@@ -24,7 +24,7 @@ st.caption("Your job-search operating system · Local database · Evidence-first
 pages = ["Overview", "Discover Remote Jobs", "Resume Profiles", "Review & Fit", "Add a Job", "Job Library", "Assessments", "Applications", "Recruiter Activity", "Interviews & Outcomes", "Learning Log"]
 page = st.sidebar.radio("Workspace", pages)
 st.sidebar.divider()
-st.sidebar.caption("Version 0.3 · Local SQLite")
+st.sidebar.caption("Version 0.4 · Local SQLite · Resume profiles")
 st.sidebar.caption("Data is stored on this computer in data/job_radar.db")
 
 def fmt_count(sql: str) -> int:
