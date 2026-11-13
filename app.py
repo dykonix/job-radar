@@ -25,7 +25,7 @@ st.caption("Your job-search operating system · Local database · Evidence-first
 pages = ["Overview", "Discover Remote Jobs", "Resume Profiles", "Review & Fit", "Add a Job", "Job Library", "Assessments", "Applications", "Recruiter Activity", "Interviews & Outcomes", "Learning Log"]
 page = st.sidebar.radio("Workspace", pages)
 st.sidebar.divider()
-st.sidebar.caption("Version 0.4 · Local SQLite · Resume profiles")
+st.sidebar.caption("Version 0.5 · Local SQLite · OpenAI resume assessment")
 st.sidebar.caption("Data is stored on this computer in data/job_radar.db")
 
 def fmt_count(sql: str) -> int:
@@ -72,7 +72,7 @@ if page == "Resume Profiles":
     - Classify material requirements as STRONG MATCH, PARTIAL MATCH, TRANSFERABLE, GAP or UNKNOWN.
     - Keep India eligibility, posting freshness and vacancy status as separate screening gates.
     - Add JD keywords only when the registered resume/evidence notes support them.
-    - The current release stores human-entered assessments; AI scoring is not yet implemented.
+    - OpenAI assesses both registered resumes independently when you explicitly run an assessment from Review & Fit. Results are advisory and must be checked against the source resume and JD.
     """)
 
 if page == "Review & Fit":
