@@ -2,7 +2,7 @@
 
 A local-first application for managing the full job-search lifecycle. The database is the system of record; dashboards and AI workflows sit on top of it.
 
-## Current release: 0.1 foundation
+## Current release: 0.2 remote discovery foundation
 
 Implemented:
 - Manual job intake with original JD, source URL, location, work mode, employment type, compensation, posting date and evidence.
@@ -10,12 +10,19 @@ Implemented:
 - Comparison record for both primary resumes (Project Manager and Associate Product Manager).
 - Application tracking, recruiter activity, interview rounds and outcomes.
 - Basic pipeline and funnel counts.
-- Freshness classification fields for India 24-hour and international remote 72-hour queues.
+- Target role families include Project Manager, Technical Project Manager, Program/Delivery Manager and Scrum Master.
+- India-only working-location policy with CONFIRMED / REVIEW / EXCLUDED eligibility states.
+- Manual sync from public Himalayas, Remote OK, We Work Remotely RSS and Remotive feeds; imported jobs retain source attribution and original application URL.
+- Source identity deduplication and additive SQLite migrations that preserve existing local records.
+- Freshness buckets are recorded from source publication timestamps; missing timestamps remain unverified.
 
 Not implemented yet:
 - AI-based JD extraction and fit assessment.
 - Resume file parsing/version generation.
-- Automated job discovery or job-board integrations.
+- LinkedIn, Naukri and Indeed automated connectors (login-gated/restricted access; use alerts or user-submitted URLs unless permitted integration is available).
+- Scheduled/background syncing (current discovery is user-triggered from the Streamlit page).
+- Automated verification that an employer will hire/payroll in India; ambiguous regional listings remain REVIEW.
+- Automated job description parsing into detailed requirements; current feed connector stores the source description and basic metadata.
 - Email/LinkedIn integrations or automatic follow-up.
 - Cloud deployment, authentication and multi-device sync.
 
