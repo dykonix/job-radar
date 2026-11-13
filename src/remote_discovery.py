@@ -67,7 +67,7 @@ def _eligible_text(text):
 
 def _normalise(source, source_id, title, company, url, description, location,
                employment="", posted=None, salary="", attribution_url=None):
-    eligibility, reason = _eligible_text(" ".join([location or "", description or ""]))
+    eligibility, reason = _eligible_text(location or "")
     return {
         "source": source, "source_job_id": str(source_id or url),
         "title": _text(title), "company": _text(company) or "Not specified",
