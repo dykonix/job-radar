@@ -109,7 +109,7 @@ if page == "Review & Fit":
                 st.success("Verification saved.")
         st.markdown("### B. Record profile-fit assessment")
         st.caption("This release does not yet run an AI assessment. Scores and decisions entered here must be based on the full JD and your verified resume evidence. Do not guess.")
-        resumes = query_df("SELECT id,name,resume_type FROM resumes WHERE is_active=1 ORDER BY id")
+        resumes = query_df("SELECT * FROM resumes WHERE is_active=1 ORDER BY id")
         for _, resume in resumes.iterrows():
             prior = query_one("SELECT * FROM assessments WHERE job_id=? AND resume_id=? ORDER BY created_at DESC LIMIT 1",
                               (int(job_id),int(resume.id)))
@@ -298,7 +298,7 @@ elif page == "Job Library":
 elif page == "Assessments":
     st.subheader("Compare both resumes against a vacancy")
     jobs = query_df("SELECT id,title,company FROM jobs ORDER BY discovered_at DESC")
-    resumes = query_df("SELECT id,name,resume_type FROM resumes WHERE is_active=1 ORDER BY id")
+    resumes = query_df("SELECT * FROM resumes WHERE is_active=1 ORDER BY id")
     if jobs.empty:
         st.info("Add a job first.")
     else:
