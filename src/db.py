@@ -50,6 +50,9 @@ CREATE TABLE IF NOT EXISTS resumes (
     file_path TEXT,
     is_active INTEGER NOT NULL DEFAULT 1,
     notes TEXT,
+    version_label TEXT,
+    evidence_notes TEXT,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -170,6 +173,11 @@ def _migrate(conn: sqlite3.Connection) -> None:
     for name, definition in additions.items():
         if name not in columns:
             conn.execute(f"ALTER TABLE jobs ADD COLUMN {name} {definition}")
+    resume_columns = {row["name"] for row in conn.execute("PRAGMA table_info(resumes)")}
+    resume_additions = {"version_label": "TEXT", "evidence_notes": "TEXT", "updated_at": "TEXT"}
+    for name, definition in resume_additions.items():
+        if name not in resume_columns:
+            conn.execute(f"ALTER TABLE resumes ADD COLUMN {name} {definition}")
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_source_identity ON jobs(source, source_job_id) WHERE source_job_id IS NOT NULL")
 
 def connect() -> sqlite3.Connection:
@@ -185,12 +193,14 @@ def init_db() -> None:
         _migrate(conn)
         conn.execute(
             "INSERT OR IGNORE INTO resumes(name, resume_type, notes) VALUES (?, ?, ?)",
-            ("Project Manager Resume", "Project Manager", "Primary project delivery resume"),
+            ("Project Management Resume", "Project Management", "Technical project delivery and project management benchmark profile"),
         )
         conn.execute(
             "INSERT OR IGNORE INTO resumes(name, resume_type, notes) VALUES (?, ?, ?)",
-            ("Associate Product Manager Resume", "Associate Product Manager", "Secondary comparison resume"),
+            ("Product Management Resume", "Product Management", "Product management, product operations and technical product delivery benchmark profile"),
         )
+        conn.execute("UPDATE resumes SET name=?, resume_type=?, notes=? WHERE name=?", ("Project Management Resume", "Project Management", "Technical project delivery and project management benchmark profile", "Project Manager Resume"))
+        conn.execute("UPDATE resumes SET name=?, resume_type=?, notes=? WHERE name=?", ("Product Management Resume", "Product Management", "Product management, product operations and technical product delivery benchmark profile", "Associate Product Manager Resume"))
 
 def execute(query: str, params: tuple[Any, ...] = ()) -> int:
     with connect() as conn:
