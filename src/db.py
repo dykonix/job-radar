@@ -19,6 +19,11 @@ CREATE TABLE IF NOT EXISTS jobs (
     company TEXT NOT NULL,
     source TEXT NOT NULL DEFAULT 'Manual',
     original_url TEXT,
+    source_job_id TEXT,
+    source_attribution TEXT,
+    role_family TEXT,
+    eligibility_status TEXT NOT NULL DEFAULT 'REVIEW',
+    eligibility_reason TEXT,
     job_description TEXT NOT NULL,
     location TEXT,
     work_mode TEXT,
@@ -129,6 +134,15 @@ CREATE TABLE IF NOT EXISTS improvement_experiments (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS source_syncs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source TEXT NOT NULL,
+    started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    completed_at TEXT,
+    imported_count INTEGER NOT NULL DEFAULT 0,
+    error TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
 CREATE INDEX IF NOT EXISTS idx_jobs_discovered ON jobs(discovered_at);
 CREATE INDEX IF NOT EXISTS idx_applications_status ON applications(status);
@@ -136,11 +150,28 @@ CREATE INDEX IF NOT EXISTS idx_interactions_followup ON interactions(next_action
 CREATE INDEX IF NOT EXISTS idx_assessments_job ON assessments(job_id);
 """
 
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Additive migrations preserve existing local job/application records."""
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(jobs)")}
+    additions = {
+        "source_job_id": "TEXT",
+        "source_attribution": "TEXT",
+        "role_family": "TEXT",
+        "eligibility_status": "TEXT NOT NULL DEFAULT 'REVIEW'",
+        "eligibility_reason": "TEXT",
+    }
+    for name, definition in additions.items():
+        if name not in columns:
+            conn.execute(f"ALTER TABLE jobs ADD COLUMN {name} {definition}")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_source_identity ON jobs(source, source_job_id) WHERE source_job_id IS NOT NULL")
+
 def connect() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    _migrate(conn)
     return conn
 
 def init_db() -> None:
