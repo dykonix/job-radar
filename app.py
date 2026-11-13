@@ -20,16 +20,83 @@ div[data-testid="stMetric"] {background: #f7f8fa; padding: 14px 16px; border-rad
 st.title("🎯 Job Radar")
 st.caption("Your job-search operating system · Local database · Evidence-first decisions")
 
-pages = ["Overview", "Discover Remote Jobs", "Add a Job", "Job Library", "Assessments", "Applications", "Recruiter Activity", "Interviews & Outcomes", "Learning Log"]
+pages = ["Overview", "Discover Remote Jobs", "Review & Fit", "Add a Job", "Job Library", "Assessments", "Applications", "Recruiter Activity", "Interviews & Outcomes", "Learning Log"]
 page = st.sidebar.radio("Workspace", pages)
 st.sidebar.divider()
-st.sidebar.caption("Version 0.1 · Local SQLite")
+st.sidebar.caption("Version 0.3 · Local SQLite")
 st.sidebar.caption("Data is stored on this computer in data/job_radar.db")
 
 def fmt_count(sql: str) -> int:
     row = query_one(sql)
     return int(row["n"] if row else 0)
 
+
+
+elif page == "Review & Fit":
+    st.subheader("Verify vacancy and assess profile fit")
+    jobs = query_df("SELECT id,title,company,original_url,location,eligibility_status,vacancy_status FROM jobs ORDER BY discovered_at DESC")
+    if jobs.empty:
+        st.info("Discover or add a vacancy first.")
+    else:
+        job_id = st.selectbox("Vacancy to review", jobs.id.tolist(),
+            format_func=lambda x: f"#{x} · {jobs.loc[jobs.id==x,'title'].iloc[0]} — {jobs.loc[jobs.id==x,'company'].iloc[0]}")
+        job = query_one("SELECT * FROM jobs WHERE id=?", (int(job_id),))
+        st.markdown(f"**{job['title']} — {job['company']}**")
+        st.write(f"Source: {job['source']} · Location: {job['location'] or 'Not specified'}")
+        if job["original_url"]:
+            st.markdown(f"[Open original vacancy]({job['original_url']})")
+        st.text_area("Imported job description", job["job_description"], height=220, disabled=True)
+        st.markdown("### A. Verify vacancy and India eligibility")
+        st.caption("Do not mark CONFIRMED merely because a listing says Remote. Check the employer's location restrictions, eligible countries, payroll/contractor rules and application page.")
+        with st.form("verify_job_form"):
+            eligibility = st.selectbox("Can an India-based candidate work in this role?",
+                ["REVIEW", "CONFIRMED", "EXCLUDED"],
+                index=["REVIEW","CONFIRMED","EXCLUDED"].index(job["eligibility_status"] or "REVIEW"))
+            vacancy = st.selectbox("Vacancy status",
+                ["UNVERIFIED", "OPEN", "CLOSED", "EXPIRED", "DUPLICATE"],
+                index=["UNVERIFIED","OPEN","CLOSED","EXPIRED","DUPLICATE"].index(job["vacancy_status"] or "UNVERIFIED"))
+            evidence = st.text_area("Evidence supporting eligibility/status",
+                value=job["eligibility_evidence"] or "", height=100,
+                placeholder="Example: Employer careers page says remote within India; contractor hiring in India is accepted.")
+            evidence_url = st.text_input("Evidence URL (employer/careers page)", value=job["posted_at_evidence"] or "")
+            verify_note = st.text_area("Verification notes", value=job["eligibility_reason"] or "")
+            verified = st.form_submit_button("Save verification", type="primary")
+            if verified:
+                execute("""UPDATE jobs SET eligibility_status=?,vacancy_status=?,eligibility_evidence=?,
+                    eligibility_reason=?,posted_at_evidence=?,eligibility_checked_at=CURRENT_TIMESTAMP,
+                    updated_at=CURRENT_TIMESTAMP WHERE id=?""",
+                    (eligibility,vacancy,evidence,verify_note,evidence_url,int(job_id)))
+                st.success("Verification saved.")
+        st.markdown("### B. Record profile-fit assessment")
+        st.caption("This release does not yet run an AI assessment. Scores and decisions entered here must be based on the full JD and your verified resume evidence. Do not guess.")
+        resumes = query_df("SELECT id,name,resume_type FROM resumes WHERE is_active=1 ORDER BY id")
+        for _, resume in resumes.iterrows():
+            prior = query_one("SELECT * FROM assessments WHERE job_id=? AND resume_id=? ORDER BY created_at DESC LIMIT 1",
+                              (int(job_id),int(resume.id)))
+            with st.expander(f"Assess against {resume['name']}", expanded=False):
+                with st.form(f"fit_{int(resume.id)}"):
+                    score = st.slider("Profile match score (0–100)",0,100,
+                        int(prior["fit_score"] or 0) if prior else 0)
+                    decision = st.selectbox("Recommendation",
+                        ["PENDING","APPLY","APPLY WITH CAUTION","DO NOT APPLY"],
+                        index=["PENDING","APPLY","APPLY WITH CAUTION","DO NOT APPLY"].index(prior["decision"]) if prior else 0)
+                    strengths = st.text_area("Strong / relevant evidence",value=prior["strengths"] or "" if prior else "")
+                    gaps = st.text_area("Partial matches, transferable experience and gaps",value=prior["gaps"] or "" if prior else "")
+                    risks = st.text_area("Mandatory screening risks",value=prior["screening_risks"] or "" if prior else "")
+                    keywords = st.text_area("ATS: covered / missing / safe to add / do not add",value=prior["ats_keywords"] or "" if prior else "")
+                    tailoring = st.text_area("Changes required before applying",value=prior["tailoring_actions"] or "" if prior else "")
+                    rationale = st.text_area("Decision rationale",value=prior["rationale"] or "" if prior else "")
+                    save_fit = st.form_submit_button("Save fit assessment")
+                    if save_fit:
+                        execute("""INSERT INTO assessments(job_id,resume_id,decision,fit_score,strengths,gaps,
+                            screening_risks,ats_keywords,tailoring_actions,rationale,assessment_version)
+                            VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(job_id,resume_id,assessment_version) DO UPDATE SET
+                            decision=excluded.decision,fit_score=excluded.fit_score,strengths=excluded.strengths,
+                            gaps=excluded.gaps,screening_risks=excluded.screening_risks,
+                            ats_keywords=excluded.ats_keywords,tailoring_actions=excluded.tailoring_actions,
+                            rationale=excluded.rationale,created_at=CURRENT_TIMESTAMP""",
+                            (int(job_id),int(resume.id),decision,score,strengths,gaps,risks,keywords,tailoring,rationale,"manual-v1"))
+                        st.success("Fit assessment saved.")
 
 if page == "Discover Remote Jobs":
     st.subheader("Discover India-accessible remote PM & Scrum roles")
@@ -85,7 +152,7 @@ if page == "Discover Remote Jobs":
                 st.warning(error)
     st.markdown("### Imported opportunities")
     df = query_df("""SELECT id,title,company,source,role_family,location,posted_at,freshness_bucket,
-        eligibility_status,eligibility_reason,original_url FROM jobs
+        eligibility_status,eligibility_reason,vacancy_status,original_url FROM jobs
         WHERE source IN ('Himalayas','Remote OK','We Work Remotely','Remotive')
         ORDER BY discovered_at DESC LIMIT 300""")
     if not df.empty:
