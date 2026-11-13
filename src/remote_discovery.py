@@ -50,7 +50,6 @@ def _date(value):
 
 def _eligible_text(text):
     value = (text or "").lower()
-    india_terms = ("india", "worldwide", "anywhere", "global", "asia", "apac")
     restricted = ("us only", "usa only", "united states only", "uk only",
                   "canada only", "europe only", "must be located in the us",
                   "must reside in the united states")
@@ -58,7 +57,7 @@ def _eligible_text(text):
         return "EXCLUDED", "Source text indicates a country restriction; manual review required"
     if "india" in value:
         return "CONFIRMED", "India explicitly appears in source location/eligibility text"
-    if any(term in value for term in ("worldwide", "anywhere", "global")):
+    if any(term in value for term in ("worldwide", "work from anywhere", "any location", "global remote")):
         return "CONFIRMED", "Worldwide/anywhere eligibility stated by source"
     if any(term in value for term in ("asia", "apac")):
         return "REVIEW", "Regional remote scope; India eligibility not guaranteed"
@@ -96,8 +95,7 @@ def fetch_himalayas():
         for item in payload.get("jobs", []):
             guid = item.get("guid")
             apply_url = item.get("applicationLink") or ""
-            loc = " ".join(item.get("locationRestrictions") or []) or (
-                "Worldwide" if not item.get("locationRestrictions") else "")
+            loc = " ".join(item.get("locationRestrictions") or []) or "Not specified"
             job = _normalise("Himalayas", guid, item.get("title"), item.get("companyName"),
                 apply_url, item.get("description") or item.get("excerpt"), loc,
                 item.get("employmentType"), item.get("pubDate"),
