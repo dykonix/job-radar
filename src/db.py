@@ -171,12 +171,12 @@ def connect() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
-    _migrate(conn)
     return conn
 
 def init_db() -> None:
     with connect() as conn:
         conn.executescript(SCHEMA)
+        _migrate(conn)
         conn.execute(
             "INSERT OR IGNORE INTO resumes(name, resume_type, notes) VALUES (?, ?, ?)",
             ("Project Manager Resume", "Project Manager", "Primary project delivery resume"),
