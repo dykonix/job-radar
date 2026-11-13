@@ -50,7 +50,7 @@ if page == "Discover Remote Jobs":
                         from datetime import datetime, timezone
                         dt = datetime.fromisoformat(posted.replace("Z", "+00:00"))
                         age_hours = (datetime.now(timezone.utc) - dt.astimezone(timezone.utc)).total_seconds() / 3600
-                        if 0 <= age_hours <= 24:
+                        if job["eligibility_status"] == "CONFIRMED" and 0 <= age_hours <= 24:
                             freshness = "India ≤24h"
                         elif 0 <= age_hours <= 72:
                             freshness = "International remote ≤72h"
