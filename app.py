@@ -41,8 +41,10 @@ if page == "Resume Profiles":
         with st.expander(str(profile["name"]) + " · " + str(profile["resume_type"]), expanded=True):
             st.write(profile["notes"] or "")
             st.caption("Current version: " + str(profile["version_label"] or "Not registered"))
-            if profile["file_path"]:
-                st.write("Stored file: " + Path(profile["file_path"]).name)
+            file_path_value = profile["file_path"]
+            has_file_path = file_path_value is not None and str(file_path_value).strip().lower() not in ("", "nan", "none")
+            if has_file_path:
+                st.write("Stored file: " + Path(str(file_path_value)).name)
             with st.form("resume_profile_" + str(int(profile["id"]))):
                 default_version = "Approved Product Management resume" if profile["resume_type"] == "Product Management" else "Technical Project Delivery resume"
                 version = st.text_input("Version label", value=profile["version_label"] or default_version)
@@ -51,7 +53,7 @@ if page == "Resume Profiles":
                     placeholder="Record only claims supported by this resume and confirmed experience. Keep gaps and unknowns explicit.")
                 save_profile = st.form_submit_button("Save profile")
                 if save_profile:
-                    stored_path = profile["file_path"]
+                    stored_path = str(file_path_value) if has_file_path else None
                     if uploaded is not None:
                         folder = Path(__file__).resolve().parent / "data" / "resumes"
                         folder.mkdir(parents=True, exist_ok=True)
