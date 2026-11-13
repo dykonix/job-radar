@@ -23,7 +23,7 @@ class DatabaseTests(unittest.TestCase):
             "INSERT INTO jobs(title, company, job_description) VALUES (?, ?, ?)",
             ("Technical Project Manager", "Example Co", "Own technical delivery.")
         )
-        resume = db.query_one("SELECT id FROM resumes WHERE resume_type='Project Manager'")
+        resume = db.query_one("SELECT id FROM resumes WHERE resume_type='Project Management'")
         assessment_id = db.execute(
             """INSERT INTO assessments(job_id,resume_id,decision,rationale)
                VALUES(?,?,?,?)""",
