@@ -124,15 +124,15 @@ if page == "Review & Fit":
                 progress.info("Assessing " + str(resume["name"]) + "…")
                 try:
                     result = assess_resume(job, resume.to_dict())
-                    strengths = "\\n".join("• " + x for x in result["strong_evidence"])
-                    matches = "\\n".join(f'{x["requirement"]}: {x["classification"]} — {x["evidence"]}' for x in result["requirement_matches"])
+                    strengths = "\n".join("• " + x for x in result["strong_evidence"])
+                    matches = "\n".join(f'{x["requirement"]}: {x["classification"]} — {x["evidence"]}' for x in result["requirement_matches"])
                     gaps = matches or "No material requirements were returned."
-                    risks = "\\n".join("• " + x for x in result["screening_risks"])
+                    risks = "\n".join("• " + x for x in result["screening_risks"])
                     ats = ("ALREADY COVERED: " + ", ".join(result["covered_keywords"]) +
-                           "\\nMISSING: " + ", ".join(result["missing_keywords"]) +
-                           "\\nSAFE TO ADD: " + ", ".join(result["safe_to_add"]) +
-                           "\\nDO NOT ADD: " + ", ".join(result["do_not_add"]))
-                    tailoring = "\\n".join("• " + x for x in result["tailoring_actions"])
+                           "\nMISSING: " + ", ".join(result["missing_keywords"]) +
+                           "\nSAFE TO ADD: " + ", ".join(result["safe_to_add"]) +
+                           "\nDO NOT ADD: " + ", ".join(result["do_not_add"]))
+                    tailoring = "\n".join("• " + x for x in result["tailoring_actions"])
                     execute("""INSERT INTO assessments(job_id,resume_id,decision,fit_score,strengths,gaps,
                         screening_risks,ats_keywords,tailoring_actions,rationale,assessment_version)
                         VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(job_id,resume_id,assessment_version) DO UPDATE SET
