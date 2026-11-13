@@ -16,7 +16,7 @@ class DatabaseTests(unittest.TestCase):
 
     def test_initializes_two_resume_profiles(self):
         rows = db.query_df("SELECT resume_type FROM resumes ORDER BY id")
-        self.assertEqual(rows["resume_type"].tolist(), ["Project Manager", "Associate Product Manager"])
+        self.assertEqual(rows["resume_type"].tolist(), ["Project Management", "Product Management"])
 
     def test_job_and_assessment_are_persisted(self):
         job_id = db.execute(
