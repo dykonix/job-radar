@@ -4,6 +4,7 @@ from datetime import date, datetime
 import streamlit as st
 
 from src.db import init_db, execute, query_df, query_one
+from src.remote_discovery import discover
 
 st.set_page_config(page_title="Job Radar | Job Search Command Center", page_icon="🎯", layout="wide")
 init_db()
@@ -19,7 +20,7 @@ div[data-testid="stMetric"] {background: #f7f8fa; padding: 14px 16px; border-rad
 st.title("🎯 Job Radar")
 st.caption("Your job-search operating system · Local database · Evidence-first decisions")
 
-pages = ["Overview", "Add a Job", "Job Library", "Assessments", "Applications", "Recruiter Activity", "Interviews & Outcomes", "Learning Log"]
+pages = ["Overview", "Discover Remote Jobs", "Add a Job", "Job Library", "Assessments", "Applications", "Recruiter Activity", "Interviews & Outcomes", "Learning Log"]
 page = st.sidebar.radio("Workspace", pages)
 st.sidebar.divider()
 st.sidebar.caption("Version 0.1 · Local SQLite")
@@ -28,6 +29,70 @@ st.sidebar.caption("Data is stored on this computer in data/job_radar.db")
 def fmt_count(sql: str) -> int:
     row = query_one(sql)
     return int(row["n"] if row else 0)
+
+
+if page == "Discover Remote Jobs":
+    st.subheader("Discover India-accessible remote PM & Scrum roles")
+    st.caption("Fetches public feeds only. A remote label is not proof of India eligibility; ambiguous listings stay in verification.")
+    sources = st.multiselect("Sources", ["Himalayas", "Remote OK", "We Work Remotely", "Remotive"],
+                             default=["Himalayas", "Remote OK", "We Work Remotely", "Remotive"])
+    st.info("Target roles: Technical Project Manager, IT/Software Project Manager, Project Manager, Program/Delivery Manager and Scrum Master. India-only working location; onsite and hybrid roles are not imported.")
+    if st.button("Fetch latest remote vacancies", type="primary", disabled=not sources):
+        with st.spinner("Fetching public job feeds..."):
+            found, errors = discover(sources)
+            inserted = 0
+            for job in found:
+                # A listing is fresh only when its source publication timestamp is available.
+                posted = job.get("posted_at")
+                freshness = "Unverified"
+                if posted:
+                    try:
+                        from datetime import datetime, timezone
+                        dt = datetime.fromisoformat(posted.replace("Z", "+00:00"))
+                        age_hours = (datetime.now(timezone.utc) - dt.astimezone(timezone.utc)).total_seconds() / 3600
+                        if 0 <= age_hours <= 24:
+                            freshness = "India ≤24h"
+                        elif 0 <= age_hours <= 72:
+                            freshness = "International remote ≤72h"
+                        else:
+                            freshness = "Outside window"
+                    except Exception:
+                        pass
+                role = "Scrum Master" if "scrum master" in job["title"].lower() else (
+                    "Program/Delivery Manager" if any(x in job["title"].lower() for x in ("program manager","delivery manager")) else "Project Manager")
+                try:
+                    before = query_one("SELECT id FROM jobs WHERE source=? AND source_job_id=?", (job["source"], job["source_job_id"]))
+                    if before:
+                        execute("""UPDATE jobs SET title=?,company=?,original_url=?,job_description=?,location=?,
+                            employment_type=?,posted_at=?,freshness_bucket=?,eligibility_status=?,eligibility_reason=?,
+                            source_attribution=?,role_family=?,updated_at=CURRENT_TIMESTAMP WHERE id=?""",
+                            (job["title"],job["company"],job["url"],job["description"],job["location"],
+                             job["employment_type"],posted,freshness,job["eligibility_status"],job["eligibility_reason"],
+                             job["source_attribution"],role,before["id"]))
+                    else:
+                        execute("""INSERT INTO jobs(title,company,source,original_url,job_description,location,
+                            work_mode,employment_type,posted_at,freshness_bucket,source_job_id,source_attribution,
+                            role_family,eligibility_status,eligibility_reason)
+                            VALUES(?,?,?,?,? ,?,'Remote',?,?,?,?,?,?,?,?)""",
+                            (job["title"],job["company"],job["source"],job["url"],job["description"],job["location"],
+                             job["employment_type"],posted,freshness,job["source_job_id"],job["source_attribution"],
+                             role,job["eligibility_status"],job["eligibility_reason"]))
+                        inserted += 1
+                except Exception as exc:
+                    st.warning(f"Could not save {job.get('title','listing')}: {exc}")
+            st.success(f"Fetched {len(found)} listings; {inserted} new records saved.")
+            for error in errors:
+                st.warning(error)
+    st.markdown("### Imported opportunities")
+    df = query_df("""SELECT id,title,company,source,role_family,location,posted_at,freshness_bucket,
+        eligibility_status,eligibility_reason,original_url FROM jobs
+        WHERE source IN ('Himalayas','Remote OK','We Work Remotely','Remotive')
+        ORDER BY discovered_at DESC LIMIT 300""")
+    if not df.empty:
+        st.dataframe(df, use_container_width=True, hide_index=True)
+        st.caption("Himalayas listings must retain visible source credit and use their supplied applicationLink. Other source terms and attribution should be checked before redistributing listings.")
+    else:
+        st.info("No imported vacancies yet. Select sources and fetch their feeds.")
 
 if page == "Overview":
     st.subheader("Search performance")
@@ -64,10 +129,12 @@ elif page == "Add a Job":
     with st.form("job_intake", clear_on_submit=True):
         col1, col2 = st.columns(2)
         title = col1.text_input("Job title *")
+        role_family = col2.selectbox("Target role family", ["Project Manager", "Scrum Master", "Program/Delivery Manager", "Other"])
         company = col2.text_input("Company *")
         source = col1.selectbox("Source", ["LinkedIn", "Naukri", "Indeed", "Company career page", "Referral", "Recruiter", "Other"])
         url = col2.text_input("Original job URL")
         location = col1.text_input("Location")
+        eligibility_status = col2.selectbox("India work eligibility", ["REVIEW", "CONFIRMED", "EXCLUDED"])
         work_mode = col2.selectbox("Work mode", ["Unknown", "On-site", "Hybrid", "Remote", "India remote", "International remote"])
         employment = col1.selectbox("Employment type", ["Unknown", "Full-time", "Part-time", "Contract", "Consulting", "Temporary"])
         compensation = col2.text_input("Compensation / range (as published)")
@@ -88,6 +155,7 @@ elif page == "Add a Job":
                     (title.strip(), company.strip(), source, url.strip(), jd.strip(), location.strip(), work_mode,
                      employment, compensation.strip(), posted.isoformat() if posted else None,
                      posted_evidence.strip(), freshness, applicants.strip(), notes.strip()))
+                execute("UPDATE jobs SET role_family=?, eligibility_status=? WHERE id=(SELECT MAX(id) FROM jobs)", (role_family, eligibility_status))
                 st.success("Vacancy saved to the database.")
 
 elif page == "Job Library":
